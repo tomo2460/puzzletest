@@ -31,7 +31,7 @@
             font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             background-color: #2c3e50;
             color: white;
-            /* touch-action: none; を削除 */
+            touch-action: none;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -46,8 +46,6 @@
             display: block;
             background: #34495e;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-            overflow: hidden;
-            /* はみ出し防止の念押し */
         }
 
         canvas {
@@ -56,8 +54,6 @@
             background: #34495e;
             touch-action: none;
             /* タッチ操作でのスクロール等を無効化 */
-            width: 100%;
-            height: 100%;
         }
 
         #ui-layer {
@@ -226,8 +222,6 @@
             border-radius: 8px;
             cursor: pointer;
             transition: background 0.2s;
-            touch-action: manipulation;
-            /* タッチ反応改善 */
         }
 
         .btn:hover {
@@ -532,13 +526,8 @@
             engine = Engine.create();
             engine.world.gravity.y = 1;
 
-            // 論理幅を固定（難易度統一のため）
-            const logicalWidth = 600;
-            // 画面幅に応じたスケール計算 (600pxより小さい画面なら縮小)
-            const scale = Math.min(1, window.innerWidth / logicalWidth);
-
-            const width = logicalWidth;
-            const height = window.innerHeight / scale;
+            const width = Math.min(window.innerWidth, 600);
+            const height = window.innerHeight;
 
 
 
@@ -555,9 +544,8 @@
             });
 
             // 壁の追加
-            // 壁の追加 (床を十分に広くして「はみ出し落ち」を防止)
             const wallOptions = { isStatic: true, render: { fillStyle: '#95a5a6' } };
-            const ground = Bodies.rectangle(width / 2, height + 50, width * 3, 100, wallOptions);
+            const ground = Bodies.rectangle(width / 2, height + 50, width, 100, wallOptions);
             const leftWall = Bodies.rectangle(-50, height / 2, 100, height * 2, wallOptions);
             const rightWall = Bodies.rectangle(width + 50, height / 2, 100, height * 2, wallOptions);
 
@@ -683,10 +671,7 @@
 
             const ionData = IONS[nextIonIndex];
             const width = render.options.width;
-            // スポーン範囲の修正: 大きなイオン(SO4: radius~80)が壁にめり込まないようマージンを確保
-            // 以前: (width - 100) + 50 -> 50～width-50. 半径80だと30pxめり込む
-            // 修正: (width - 200) + 100 -> 100～width-100. 半径80でも壁まで20px余裕あり
-            const x = Math.random() * (width - 200) + 100;
+            const x = Math.random() * (width - 100) + 50;
 
             const body = Bodies.circle(x, -50, ionData.radius, {
                 restitution: 0.5,
