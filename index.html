@@ -468,6 +468,36 @@
         let activePairs = new Set(); // 接触ボーナス判定用
         let spawnTimer; // setTimeout用
         let currentSpawnInterval = 2000; // 現在のスポーン間隔
+        let scaleFactor = 1; // グローバルスケール係数
+
+        // リサイズ対応
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                // レイアウト更新のためリロード（物理エンジンの再計算が複雑なため）
+                location.reload();
+            }, 300);
+        });
+
+        function calculateDimensions() {
+            const TARGET_AR = 630 / 1050; // ヒエラルキー比率は0.6で維持
+            const BASE_HEIGHT = 1050;  // 基準高さを変更（より広く使えるように）
+
+            let h = window.innerHeight;
+            let w = h * TARGET_AR;
+
+            // 幅が画面からはみ出る場合
+            if (w > window.innerWidth) {
+                w = window.innerWidth;
+                h = w / TARGET_AR;
+            }
+
+            // スケール計算
+            const scale = h / BASE_HEIGHT;
+
+            return { width: w, height: h, scale: scale };
+        }
 
         function initGame(mode) {
             console.log("initGame が呼び出されました. Mode:", mode);
@@ -524,10 +554,15 @@
             MouseConstraint = Matter.MouseConstraint;
 
             engine = Engine.create();
-            engine.world.gravity.y = 1;
+            engine.world.gravity.y = 1; // 重力はスケールに関わらず1（見た目の速度は相対的に変わるが、ゲーム性は維持）
 
-            const width = Math.min(window.innerWidth, 600);
-            const height = window.innerHeight;
+            // 新しいレスポンシブロジック
+            const dims = calculateDimensions();
+            const width = dims.width;
+            const height = dims.height;
+            scaleFactor = dims.scale;
+
+            console.log(`Dims: ${width}x${height}, Scale: ${scaleFactor}`);
 
 
 
@@ -544,10 +579,15 @@
             });
 
             // 壁の追加
+            const wallThick = 100 * scaleFactor; // 壁の厚みもスケール
             const wallOptions = { isStatic: true, render: { fillStyle: '#95a5a6' } };
-            const ground = Bodies.rectangle(width / 2, height + 50, width, 100, wallOptions);
-            const leftWall = Bodies.rectangle(-50, height / 2, 100, height * 2, wallOptions);
-            const rightWall = Bodies.rectangle(width + 50, height / 2, 100, height * 2, wallOptions);
+
+            // 床
+            const ground = Bodies.rectangle(width / 2, height + (wallThick / 2), width * 3, wallThick, wallOptions);
+            // 左壁
+            const leftWall = Bodies.rectangle(0 - (wallThick / 2), height / 2, wallThick, height * 2, wallOptions);
+            // 右壁
+            const rightWall = Bodies.rectangle(width + (wallThick / 2), height / 2, wallThick, height * 2, wallOptions);
 
             World.add(engine.world, [ground, leftWall, rightWall]);
 
@@ -671,9 +711,17 @@
 
             const ionData = IONS[nextIonIndex];
             const width = render.options.width;
-            const x = Math.random() * (width - 100) + 50;
 
-            const body = Bodies.circle(x, -50, ionData.radius, {
+            // スポーン範囲修正 (スケール対応)
+            const margin = 100 * scaleFactor;
+            // width - margin*2 の範囲でランダム
+            // ただし幅が狭すぎる場合のガード
+            const spawnWidth = Math.max(10, width - margin * 2);
+            const x = Math.random() * spawnWidth + margin;
+
+            const radius = ionData.radius * scaleFactor;
+
+            const body = Bodies.circle(x, -radius * 2, radius, {
                 restitution: 0.5,
                 friction: 0.05,
                 label: `ion-${ionData.formula}`,
@@ -1032,12 +1080,12 @@
                 document.body.appendChild(particle);
 
                 const angle = Math.random() * Math.PI * 2;
-                const distance = Math.random() * 50 + 20;
+                const distance = (Math.random() * 50 + 20) * scaleFactor;
                 const translateX = Math.cos(angle) * distance;
                 const translateY = Math.sin(angle) * distance;
 
                 particle.animate([
-                    { transform: `translate(0, 0) scale(1)`, opacity: 1 },
+                    { transform: `translate(0, 0) scale(${scaleFactor})`, opacity: 1 },
                     { transform: `translate(${translateX}px, ${translateY}px) scale(0)`, opacity: 0 }
                 ], {
                     duration: Math.random() * 500 + 500,
