@@ -337,6 +337,73 @@
             font-size: 24px;
             color: #bdc3c7;
             margin-bottom: 40px;
+            margin-bottom: 40px;
+        }
+
+        /* ランキング用CSS */
+        #ranking-container {
+            width: 80%;
+            max-width: 400px;
+            margin-bottom: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .ranking-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 18px;
+        }
+
+        .ranking-row:last-child {
+            border-bottom: none;
+        }
+
+        .rank-num {
+            font-weight: bold;
+            width: 30px;
+            color: #f1c40f;
+        }
+
+        .rank-name {
+            flex-grow: 1;
+            text-align: left;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            margin-right: 10px;
+        }
+
+        .rank-score {
+            font-family: monospace;
+            font-size: 20px;
+        }
+
+        .rank-1 .rank-num {
+            color: #e74c3c;
+            font-size: 1.2em;
+        }
+
+        /* 金（に見立てた赤/特別色） */
+
+        /* 名前入力用CSS */
+        #name-input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+            max-width: 300px;
+        }
+
+        .input-field {
+            padding: 10px;
+            font-size: 20px;
+            border-radius: 5px;
+            border: none;
+            text-align: center;
         }
     </style>
 </head>
@@ -366,7 +433,16 @@
         <div id="game-over-modal">
             <h1>GAME OVER</h1>
             <p style="font-size: 24px; margin-bottom: 30px;">最終スコア: <span id="final-score">0</span></p>
-            <div style="display: flex; gap: 20px;">
+
+            <!-- 名前入力エリア（ランクイン時のみ表示） -->
+            <div id="name-input-section" style="display: none;">
+                <p style="color: #f1c40f; font-weight: bold;">ランクインおめでとう！</p>
+                <input type="text" id="player-name-input" class="input-field" placeholder="名前を入力（8文字）" maxlength="8">
+                <button class="btn" onclick="registerRank()" style="background: #e67e22;">登録</button>
+            </div>
+
+            <!-- 通常ボタンエリア -->
+            <div id="gameover-buttons" style="display: flex; gap: 20px;">
                 <button class="btn" onclick="goToTitle()">タイトルへ</button>
                 <button class="btn" onclick="restartGame(true)">リトライ</button>
             </div>
@@ -375,7 +451,16 @@
         <div id="title-screen">
             <h1>クリスタル<br>ビルダー</h1>
             <p class="subtitle">イオン結合パズル</p>
-            <p style="font-size: 20px; margin-bottom: 30px;">ハイスコア: <span id="high-score-display">0</span></p>
+
+            <!-- ランキング表示エリア -->
+            <div id="ranking-container">
+                <div style="text-align:center; color:#bdc3c7; margin-bottom:5px;">- TOP 3 -</div>
+                <div id="ranking-list">
+                    <!-- JSで生成 -->
+                    <div class="ranking-row"><span class="rank-name">Loading...</span></div>
+                </div>
+            </div>
+
             <div style="display: flex; gap: 20px;">
                 <button class="btn" id="start-btn" onclick="initGame('normal')">ノーマル</button>
                 <button class="btn" onclick="initGame('hard')" style="background: #e74c3c;">ハード</button>
@@ -1275,9 +1360,7 @@
         window.addEventListener('load', () => {
             console.log("スクリプト開始: ウィンドウロード完了");
 
-            // ハイスコア表示
-            const highScore = localStorage.getItem('ion_highscore') || 0;
-            document.getElementById('high-score-display').innerText = highScore;
+            // ranking system replaced high score display
 
             // URLパラメータチェック (リトライかどうか)
             const urlParams = new URLSearchParams(window.location.search);
