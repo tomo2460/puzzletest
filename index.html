@@ -23,6 +23,33 @@
     </script>
     <!-- Matter.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <!-- Firebase SDK (v9 compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // --- Firebase設定 (ユーザーがここに値を貼り付ける) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyACKFsg3RK0DR5_ciEmUuH6KPkoo87KrNM",
+            authDomain: "crystal-builder0802.firebaseapp.com",
+            projectId: "crystal-builder0802",
+            storageBucket: "crystal-builder0802.firebasestorage.app",
+            messagingSenderId: "138379163430",
+            appId: "1:138379163430:web:7d7bad6fda98ff721fb3e7"
+        };
+        // --------------------------------------------------
+
+        // Firebase初期化
+        let db;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("Firebase Initialized");
+        } catch (e) {
+            console.warn("Firebase Config not found or invalid. Leaderboard disabled.", e);
+        }
+    </script>
     <style>
         body {
             margin: 0;
@@ -755,7 +782,8 @@
                 const ctx = render.context;
                 const bodies = Composite.allBodies(engine.world);
 
-                ctx.font = "bold 26px Arial"; // フォントサイズを縮小 (32px * 0.8 ≈ 26px)
+                const scaledFontSize = Math.round(26 * scaleFactor);
+                ctx.font = `bold ${scaledFontSize}px Arial`;
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
 
@@ -1118,6 +1146,10 @@
 
             document.getElementById('final-score').innerText = score;
             document.getElementById('game-over-modal').style.display = 'flex';
+
+            // ランクイン判定
+            checkRank(score);
+
             if (spawnTimer) clearTimeout(spawnTimer);
         }
 
@@ -1145,6 +1177,89 @@
         window.showHelp = function () {
             document.getElementById('help-modal').style.display = 'flex';
         }
+
+        // --- ランキングロジック (Firestore) ---
+        async function loadRanking() {
+            if (!db) return;
+            const list = document.getElementById('ranking-list');
+            try {
+                const snapshot = await db.collection('scores').orderBy('score', 'desc').limit(3).get();
+                if (snapshot.empty) {
+                    list.innerHTML = '<div class="ranking-row"><span class="rank-name">No Data</span></div>';
+                    return;
+                }
+
+                let html = '';
+                let rank = 1;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                    html += `
+                        <div class="ranking-row ${rankClass}">
+                            <span class="rank-num">${rank}</span>
+                            <span class="rank-name">${escapeHtml(data.name)}</span>
+                            <span class="rank-score">${data.score}</span>
+                        </div>`;
+                    rank++;
+                });
+                list.innerHTML = html;
+            } catch (e) {
+                console.error("Error loading ranking:", e);
+                list.innerHTML = '<div class="ranking-row"><span class="rank-name">Error</span></div>';
+            }
+        }
+
+        async function checkRank(score) {
+            if (!db) return;
+            if (score === 0) return; // 0点は登録不可
+
+            try {
+                const snapshot = await db.collection('scores').orderBy('score', 'desc').limit(3).get();
+                // データが3件未満、または3位のスコアより高い場合
+                if (snapshot.size < 3 || score > snapshot.docs[snapshot.size - 1].data().score) {
+                    document.getElementById('name-input-section').style.display = 'flex';
+                }
+            } catch (e) {
+                console.error("Error checking rank:", e);
+            }
+        }
+
+        async function registerRank() {
+            if (!db) return;
+            const nameInput = document.getElementById('player-name-input');
+            const name = nameInput.value.trim() || "名無し";
+
+            try {
+                await db.collection('scores').add({
+                    name: name,
+                    score: score,
+                    title: document.getElementById('title-val').innerText,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("ランキングに登録しました！");
+                document.getElementById('name-input-section').style.display = 'none';
+                loadRanking(); // 再読み込み
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                alert("登録エラーが発生しました");
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function (m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        // 初期化時にランキング読み込み
+        window.addEventListener('load', loadRanking);
 
         window.hideHelp = function () {
             document.getElementById('help-modal').style.display = 'none';
