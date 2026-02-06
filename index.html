@@ -426,6 +426,9 @@
 
             <div id="electron-kun">e⁻</div>
             <div id="electron-speech"></div>
+
+            <button id="suspend-btn" onclick="suspendGame()"
+                style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); padding: 8px 15px; font-size: 16px; background: #7f8c8d; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 150; pointer-events: auto;">中断(保存)</button>
         </div>
 
         <!-- Canvas will be injected here -->
@@ -462,6 +465,8 @@
             </div>
 
             <div style="display: flex; gap: 20px;">
+                <button class="btn" id="resume-btn" onclick="loadGame()"
+                    style="display: none; background: #27ae60;">つづきから</button>
                 <button class="btn" id="start-btn" onclick="initGame('normal')">ノーマル</button>
                 <button class="btn" onclick="initGame('hard')" style="background: #e74c3c;">ハード</button>
                 <button class="btn" onclick="showHelp()" style="background: #3498db;">遊び方</button>
@@ -807,6 +812,11 @@
         function pickNextIon() {
             console.log("次のイオンを選択中");
             nextIonIndex = Math.floor(Math.random() * IONS.length);
+            updateNextIonDisplay();
+        }
+
+        function updateNextIonDisplay() {
+            if (!IONS || IONS.length === 0) return;
             const ion = IONS[nextIonIndex];
             const nextDisplay = document.getElementById('next-ion-name');
             if (nextDisplay) {
@@ -1343,8 +1353,157 @@
             });
         }
 
-        // 初期化時にランキング読み込み
-        window.addEventListener('load', loadRanking);
+        // --- 中断・再開 (Save & Resume) ---
+        const SAVE_KEY = 'ion_save_state';
+
+        function checkSaveData() {
+            const data = localStorage.getItem(SAVE_KEY);
+            const resumeBtn = document.getElementById('resume-btn');
+            if (data) {
+                resumeBtn.style.display = 'block';
+            } else {
+                resumeBtn.style.display = 'none';
+            }
+        }
+
+        function suspendGame() {
+            saveGame();
+            goToTitle();
+        }
+
+        function saveGame() {
+            if (isGameOver) return; // ゲームオーバー時は保存しない
+
+            const bodies = Composite.allBodies(engine.world).filter(b =>
+                !b.isStatic && (b.label.startsWith('ion') || b.label === 'crystal')
+            );
+
+            const entities = bodies.map(b => ({
+                label: b.label,
+                x: b.position.x,
+                y: b.position.y,
+                angle: b.angle,
+                velocity: b.velocity,
+                angularVelocity: b.angularVelocity,
+                ionData: b.plugin.ionData, // イオンの場合
+                hp: b.plugin.hp, // クリスタルの場合
+                maxHp: b.plugin.maxHp,
+                circleRadius: b.circleRadius || 0, // 円の半径
+                width: b.bounds.max.x - b.bounds.min.x, // 矩形サイズ（概算）
+                height: b.bounds.max.y - b.bounds.min.y
+            }));
+
+            const saveData = {
+                score: score,
+                gameMode: gameMode,
+                nextIonIndex: nextIonIndex,
+                scaleFactor: scaleFactor, // 保存時のスケール
+                entities: entities,
+                timestamp: Date.now()
+            };
+
+            localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+            // alert('中断データを保存しました');
+        }
+
+        function loadGame() {
+            const json = localStorage.getItem(SAVE_KEY);
+            if (!json) return;
+
+            const data = JSON.parse(json);
+
+            // 基礎初期化
+            initGame(data.gameMode);
+
+            // 少し待ってから復元（initGameの処理完了を確実にするため）
+            setTimeout(() => {
+                restoreState(data);
+            }, 50);
+        }
+
+        function restoreState(data) {
+            // スコア復元
+            score = data.score;
+            document.getElementById('score-val').innerText = score;
+            checkTitle();
+
+            // Next Ion復元
+            nextIonIndex = data.nextIonIndex;
+            updateNextIonDisplay();
+
+            // スケール補正率
+            const currentScale = scaleFactor;
+            const savedScale = data.scaleFactor || 1;
+            const ratio = currentScale / savedScale;
+
+            // 既存の動的オブジェクト（もしあれば）を削除
+            const currentBodies = Composite.allBodies(engine.world).filter(b => !b.isStatic);
+            World.remove(engine.world, currentBodies);
+
+            // オブジェクト再生成
+            data.entities.forEach(e => {
+                let body;
+                const x = e.x * ratio;
+                const y = e.y * ratio;
+
+                if (e.label.startsWith('ion')) {
+                    // イオン
+                    const radius = e.circleRadius * ratio;
+                    body = Bodies.circle(x, y, radius, {
+                        restitution: 0.9,
+                        friction: 0.005,
+                        label: e.label,
+                        angle: e.angle,
+                        plugin: { ionData: e.ionData },
+                        render: {
+                            fillStyle: e.ionData.color,
+                            strokeStyle: 'white',
+                            lineWidth: 2
+                        }
+                    });
+                } else if (e.label === 'crystal') {
+                    // クリスタル (短辺を基準にサイズ復元)
+                    // Note: 矩形は幅・高さが必要。Boundsから取得した値を利用
+                    const w = e.width * ratio;
+                    const h = e.height * ratio;
+                    body = Bodies.rectangle(x, y, w, h, {
+                        isStatic: false,
+                        restitution: 0.2,
+                        friction: 0.8,
+                        density: 0.05,
+                        label: 'crystal',
+                        angle: e.angle,
+                        plugin: { hp: e.hp, maxHp: e.maxHp },
+                        render: {
+                            fillStyle: '#7f8c8d',
+                            strokeStyle: '#2c3e50',
+                            lineWidth: 2
+                        }
+                    });
+                }
+
+                if (body) {
+                    Body.setVelocity(body, { x: e.velocity.x * ratio, y: e.velocity.y * ratio });
+                    Body.setAngularVelocity(body, e.angularVelocity);
+                    World.add(engine.world, body);
+                }
+            });
+
+            // UI更新
+            document.getElementById('title-screen').style.display = 'none';
+            // 再開後はセーブデータを消す（1回限り） -> 仕様によるが、今回は残す？
+            // 通常は「再開したら消す」のが一般的（リセット対策）
+            // ただし、モバイルブラウザなどで落ちた場合を考えると「完了・ゲームオーバーまで残す」もアリ。
+            // ここでは「中断」の意図を汲んで、ロードしたら消去する。
+            localStorage.removeItem(SAVE_KEY);
+            checkSaveData(); // ボタン非表示
+        }
+
+        // 初期化時にランキング読み込み & セーブデータ確認
+        window.addEventListener('load', () => {
+            loadRanking();
+            checkSaveData();
+        });
 
         window.hideHelp = function () {
             document.getElementById('help-modal').style.display = 'none';
